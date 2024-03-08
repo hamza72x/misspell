@@ -112,6 +112,7 @@ func main() {
 		outFlag     = flag.String("o", "stdout", "output file or [stderr|stdout|]")
 		format      = flag.String("f", "", "'csv', 'sqlite3' or custom Golang template for output")
 		ignores     = flag.String("i", "", "ignore the following corrections, comma separated")
+		ignoreDirs  = flag.String("id", "node_modules,vendor,.git,.svn,.idea,.vscode,.next", "ignore directories, comma separated")
 		locale      = flag.String("locale", "", "Correct spellings using locale preferences for US or UK.  Default is to use a neutral variety of English.  Setting locale to US will correct the British spelling of 'colour' to 'color'")
 		mode        = flag.String("source", "text", "Source mode: text (default), go (comments only)")
 		debugFlag   = flag.Bool("debug", false, "Debug matching, very slow")
@@ -161,6 +162,16 @@ func main() {
 	//
 	if *ignores != "" {
 		r.RemoveRule(strings.Split(*ignores, ","))
+	}
+
+	//
+	// Directories to ignore
+	//
+	ignoreDirsMap := make(map[string]bool)
+	if *ignoreDirs != "" {
+		for _, dir := range strings.Split(*ignoreDirs, ",") {
+			ignoreDirsMap[strings.TrimSpace(dir)] = true
+		}
 	}
 
 	//
@@ -306,6 +317,24 @@ func main() {
 
 	for _, filename := range args {
 		filepath.Walk(filename, func(path string, info os.FileInfo, err error) error {
+
+			// ignore directories
+			// if the directory is in the ignore list, skip it
+			// e.g: .git, .svn or: partial match
+			dirArr := strings.Split(path, string(os.PathSeparator))
+			partial := ""
+			for _, dir := range dirArr {
+				partial = filepath.Join(partial, dir)
+
+				if _, ok := ignoreDirsMap[dir]; ok {
+					return filepath.SkipDir
+				}
+
+				if _, ok := ignoreDirsMap[partial]; ok {
+					return filepath.SkipDir
+				}
+			}
+
 			if err == nil && !info.IsDir() {
 				c <- path
 			}
